@@ -1,0 +1,407 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split, StratifiedKFold
+from sklearn.neighbors import KNeighborsClassifier
+import seaborn as sns
+from sklearn.metrics import mean_squared_error, log_loss
+from sklearn.linear_model import Lasso, LassoCV, RidgeCV, ElasticNetCV
+from sklearn.preprocessing import StandardScaler, PolynomialFeatures
+from sklearn.naive_bayes import BernoulliNB, GaussianNB, MultinomialNB
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.datasets import make_classification
+from sklearn.svm import SVC
+from sklearn import svm
+from sklearn.svm import LinearSVC
+from sklearn.model_selection import cross_val_score
+from sklearn.metrics import classification_report
+from sklearn.metrics import roc_curve
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import confusion_matrix
+from sklearn import metrics
+from sklearn.metrics import mean_squared_error
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import plot_roc_curve
+from scipy.stats import randint
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import RandomizedSearchCV
+import csv
+
+# Load dataset
+E = pd.read_csv("Projectt.csv")
+
+#summary statistics
+DDD = E.describe()
+DDD.to_csv("Wrte.csv")
+
+#variable check
+print(E.info())
+print(E.head(3))
+print(E.isnull().sum())
+
+#load variables
+X = E.iloc[:,0:14]
+y = E.iloc[:,-1]
+
+#Heatmap
+plt.figure(figsize=(16, 6))
+# Store heatmap object in a variable to easily access it when you want to include more features (such as title).
+# Set the range of values to be displayed on the colormap from -1 to 1, and set the annotation to True to display the correlation values on the heatmap.
+heatmap = sns.heatmap(E.corr(), vmin=-1, vmax=1, annot=True)
+# Give a title to the heatmap. Pad defines the distance of the title from the top of the heatmap.
+heatmap.set_title('Correlation Heatmap', fontdict={'fontsize':12}, pad=12);
+plt.savefig('heatmap.png', dpi=300, bbox_inches='tight')
+
+#lassoCV for feature selection
+print('Use LassoCV to find the optimal ALPHA value for L1 regularization')
+alphavec = 10**np.linspace(-3,3,200)
+lasso_model = LassoCV(alphas = alphavec, cv=5)
+lasso_model.fit(X, y)
+print('LASSO best alpha: ', lasso_model.alpha_ )
+zipped = list(zip(X.columns, lasso_model.coef_))
+zipped = sorted(zipped, key=lambda x: x[1], reverse=True)
+print(zipped)
+a,b = zip(*zipped)
+sns.barplot(y=list(a), x=list(b), color='b')
+plt.title('Top Features derived by LassoCV', size=15)
+
+#Random forest for feature selection
+rfc = RandomForestClassifier(random_state= 43, n_estimators=100)
+rfc_model = rfc.fit(X, y)
+(pd.Series(rfc_model.feature_importances_, index=X.columns)
+   .nlargest(10)
+   .plot(kind='barh', figsize=[8,4])
+   .invert_yaxis())
+plt.yticks(size=15)
+plt.title('Top Features derived by Random Forest', size=20)
+
+#Load dataset into variable with only featured variable
+F = pd.read_csv("featproj.csv")
+X = F.iloc[:,0:12]
+y = F.iloc[:,-1]
+std = StandardScaler()
+std.fit(X.values)
+X_scaled = std.transform(X.values)
+print('X_scaled', X_scaled.shape)
+
+# Split into train and test sets
+rescaledX_train, rescaledX_test, y_train, y_test = train_test_split(X_scaled
+                                                    ,
+                                                    y,
+                                                 test_size=0.25,
+                                                    random_state=43)
+kf = StratifiedKFold(n_splits=5, shuffle=True, random_state= 43)
+def E(model, rescaledX_train, rescaledX_test, y_train, y_test, name):
+   model.fit(rescaledX_train, y_train)
+   accuracy     = np.mean(cross_val_score(model, rescaledX_train, y_train, cv=kf, scoring='accuracy'))
+   precision    = np.mean(cross_val_score(model, rescaledX_train, y_train, cv=kf, scoring='precision'))
+   recall       = np.mean(cross_val_score(model, rescaledX_train, y_train, cv=kf, scoring='recall'))
+   f1score      = np.mean(cross_val_score(model, rescaledX_train, y_train, cv=kf, scoring='f1'))
+   rocauc       = np.mean(cross_val_score(model, rescaledX_train, y_train, cv=kf, scoring='roc_auc'))
+   y_pred = model.predict(rescaledX_test)
+   logloss      = log_loss(y_test, y_pred) 
+   df_model = pd.DataFrame({'model'        : [name],
+                            'accuracy'     : [accuracy],
+                            'precision'    : [precision],
+                            'recall'       : [recall],
+                            'f1score'      : [f1score],
+                            'rocauc'       : [rocauc],
+                            'logloss'      : [logloss],
+                            'timetaken'    : [0]       })
+   return df_model
+
+gnb = GaussianNB()
+bnb = BernoulliNB()
+#mnb = MultinomialNB()
+logit = LogisticRegression()
+knn = KNeighborsClassifier()
+decisiontree = DecisionTreeClassifier()
+randomforest = RandomForestClassifier()
+svc = SVC(max_iter = 10000)
+linearsvc = LinearSVC(max_iter = 10000)
+df_models = pd.concat([E(gnb, rescaledX_train, rescaledX_test, y_train, y_test, 'GaussianNB'),
+                      E(bnb,rescaledX_train, rescaledX_test, y_train, y_test, 'BernoulliNB'),
+                      #E(mnb, rescaledX_train, rescaledX_test, y_train, y_test, 'MultinomialNB'),
+                      E(logit,rescaledX_train, rescaledX_test, y_train, y_test, 'LogisticRegression'),
+                      E(knn, rescaledX_train, rescaledX_test, y_train, y_test, 'KNN'),
+                      E(decisiontree,rescaledX_train, rescaledX_test, y_train, y_test, 'DecisionTree'),
+                      E(randomforest, rescaledX_train, rescaledX_test, y_train, y_test, 'RandomForest'),
+                      E(svc, rescaledX_train, rescaledX_test, y_train, y_test, 'SVC'),
+                      E(linearsvc, rescaledX_train, rescaledX_test, y_train, y_test, 'LinearSVC')
+                      ], axis=0).reset_index()
+df_models = df_models.drop('index', axis=1)
+df_models
+D = df_models
+D.to_csv("Wrote.csv")
+
+
+# Instantiate a LogisticRegression classifier with default parameter values
+logreg = LogisticRegression()
+# Fit logreg to the train set
+log_fit = logreg.fit(rescaledX_train, y_train)
+df=pd.DataFrame({'odds_ratio':(np.exp(log_fit.coef_).T).tolist(),'variable':x.columns.tolist()})
+df['odds_ratio'] = df['odds_ratio'].str.get(0)
+
+df=df.sort_values('odds_ratio', ascending=False)
+df
+
+
+
+
+log_predict = logreg.predict(rescaledX_test)
+
+
+
+print(confusion_matrix(y_test, log_predict))
+print(classification_report(y_test,log_predict))
+logreg_disp = plot_roc_curve(logreg, rescaledX_test, y_test)
+plt.plot([0, 1], [0, 1], 'k--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Logistic Regression ROC Curve')
+plt.show()
+
+
+import statsmodels.api as sm
+import numpy as np
+res = sm.Logit(y_train, rescaledX_train).fit()
+res.summary()
+Coeff = res.params
+Coeff.to_csv("Coef.csv")
+OR = np.exp(res.params)
+OR.to_csv("OR.csv")
+
+params = res.params
+conf = res.conf_int()
+conf['Odds Ratio'] = params
+conf.columns = ['5%', '95%', 'Odds Ratio']
+CI= np.exp(conf)
+CI.to_csv("CI.csv")
+
+# Create the hyperparameter grid
+c_space = np.logspace(0.01, 0.1, 10,100)
+param_grid = {'C': c_space, 'penalty': ['l1', 'l2']}
+
+# Instantiate the logistic regression classifier: logreg
+logreg = LogisticRegression()
+
+# Instantiate the GridSearchCV object: logreg_cv
+logreg_cv = GridSearchCV(logreg,param_grid , cv=5)
+
+# Fit it to the training data
+logreg_cv.fit(rescaledX_train, y_train)
+logcvy_pred = logreg_cv.predict(rescaledX_test)
+print(confusion_matrix(y_test,logcvy_pred))
+print(classification_report(y_test,logcvy_pred))
+logreg_cv_disp = plot_roc_curve(logreg_cv, rescaledX_test, y_test)
+plt.plot([0, 1], [0, 1], 'k--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Tuned Logistic Regression ROC Curve')
+plt.show()
+
+
+
+#random forest
+rfc = RandomForestClassifier(random_state= 43, n_estimators=100)
+
+rfc_model = rfc.fit(rescaledX_train, y_train)
+
+rfc_y_pred = rfc.predict(rescaledX_test)
+
+
+print(rfc.score(rescaledX_test, y_test))
+
+from sklearn.metrics import confusion_matrix
+rfc_y_pred = rfc.predict(rescaledX_test)
+
+print(confusion_matrix(y_test,rfc_y_pred))
+print(classification_report(y_test,rfc_y_pred))
+
+rfc_disp = plot_roc_curve(rfc, rescaledX_test, y_test)
+plt.plot([0, 1], [0, 1], 'k--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Random Forest ROC Curve')
+plt.show()
+
+rfg = RandomForestClassifier(random_state= 43)
+
+# Create the parameter grid based on the results of random search 
+param_grid = {
+    'bootstrap': [True],
+    'max_depth': [80, 90, 100, 110],
+    'max_features': [2, 3],
+    'min_samples_leaf': [3, 4, 5],
+    'min_samples_split': [8, 10, 12],
+    'n_estimators': [100, 200, 300, 1000]
+}
+# Create a based model
+
+grid_search = GridSearchCV(estimator = rfg, param_grid = param_grid, 
+                          cv = 3, n_jobs = -1, verbose = 2)
+
+# Fit the grid search to the data
+grid_search.fit(rescaledX_train, y_train)
+rfcgrid_y_pred = grid_search.predict(rescaledX_test)
+print(confusion_matrix(y_test,rfcgrid_y_pred))
+print(classification_report(y_test,rfcgrid_y_pred))
+grid_search_disp = plot_roc_curve(grid_search, rescaledX_test, y_test)
+plt.plot([0, 1], [0, 1], 'k--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Tuned Random Forest ROC Curve')
+plt.show()
+
+
+#Decision tree
+# Instantiate a Decision Tree classifier: tree
+tree = DecisionTreeClassifier()
+tree.fit(rescaledX_train,y_train)
+tree_pred = tree.predict(rescaledX_test)
+print(confusion_matrix(y_test,tree_pred))
+print(classification_report(y_test,tree_pred))
+tree_disp = plot_roc_curve(tree, rescaledX_test, y_test)
+plt.plot([0, 1], [0, 1], 'k--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Decision Tree ROC Curve')
+plt.show()
+
+# Instantiate the RandomizedSearchCV object: tree_cv
+param_dist = {"max_depth": [3, None],
+              "max_features": randint(1, 9),
+              "min_samples_leaf": randint(1, 9),
+              "criterion": ["gini", "entropy"]}
+
+tree_cv = RandomizedSearchCV(tree, param_dist,cv= 5)
+
+# Fit it to the data
+tree_cv.fit(rescaledX_train,y_train)
+tree_cv_y_pred = tree_cv.predict(rescaledX_test)
+
+print(confusion_matrix(y_test,tree_cv_y_pred))
+print(classification_report(y_test,tree_cv_y_pred))
+tree_cv_disp = plot_roc_curve(tree_cv, rescaledX_test, y_test)
+plt.plot([0, 1], [0, 1], 'k--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Tuned Decision Tree ROC Curve')
+plt.show()
+
+
+# Create a k-NN classifier with 7 neighbors: knn
+knn = KNeighborsClassifier()
+# Fit the classifier to the training data
+knn.fit(rescaledX_train, y_train)
+knn_y_pred = knn.predict(rescaledX_test)
+print(confusion_matrix(y_test,knn_y_pred))
+print(classification_report(y_test,knn_y_pred))
+knn_disp = plot_roc_curve(knn, rescaledX_test, y_test)
+plt.plot([0, 1], [0, 1], 'k--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('KNN ROC Curve')
+plt.show()
+
+
+grid_searchknn = GridSearchCV(estimator= knn,
+              param_grid={'n_neighbors': range(1, 50),
+                          'weights': ['uniform', 'distance']})
+grid_searchknn.fit(rescaledX_train, y_train)
+Knncv_pred = grid_searchknn.predict(rescaledX_test)
+
+print(confusion_matrix(y_test,Knncv_pred))
+print(classification_report(y_test,Knncv_pred))
+grid_searchknn_disp = plot_roc_curve(grid_searchknn, rescaledX_test, y_test)
+plt.plot([0, 1], [0, 1], 'k--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Tuned KNN ROC Curve')
+plt.show()
+
+#SVC Linear
+SVML = svm.SVC(C=1.0, kernel='linear', degree=3, gamma='auto',probability=True)
+SVML.fit(rescaledX_train, y_train)
+svc_y_pred = SVML.predict(rescaledX_test)
+svc_y_pred_prob = SVML.fit(rescaledX_train, y_train).predict_proba(rescaledX_test)
+# Compute metrics
+print(classification_report(y_test, svc_y_pred))
+print(confusion_matrix(y_test,svc_y_pred))
+svc_disp = plot_roc_curve(SVML, rescaledX_test, y_test)
+plt.plot([0, 1], [0, 1], 'k--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Linear SVC ROC Curve')
+plt.show()
+
+param_grid = {'C': [0.1,1, 10, 100], 'gamma': [1,0.1,0.01,0.001],'kernel': ["linear"]}
+SVMLcv = GridSearchCV(SVC(),param_grid,refit=True,verbose=2)
+SVMLcv.fit(rescaledX_train, y_train)
+SVMLcv_pred = SVMLcv.predict(rescaledX_test)
+print(classification_report(y_test, SVMLcv_pred ))
+print(confusion_matrix(y_test,SVMLcv_pred))
+SVMLcv_disp = plot_roc_curve(SVMLcv, rescaledX_test, y_test)
+plt.plot([0, 1], [0, 1], 'k--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Tuned Linear SVC ROC Curve')
+plt.show()
+
+#SVC
+SVM = svm.SVC(C=1.0, kernel='rbf', degree=3, gamma='auto',probability=True)
+SVM.fit(rescaledX_train, y_train)
+svc_y_pred = SVM.predict(rescaledX_test)
+svc_y_pred_prob = SVM.fit(rescaledX_train, y_train).predict_proba(rescaledX_test)
+# Compute metrics
+print(classification_report(y_test, svc_y_pred))
+svc_disp = plot_roc_curve(SVM, rescaledX_test, y_test)
+plt.plot([0, 1], [0, 1], 'k--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('SVC (RBF) ROC Curve')
+plt.show()
+
+param_grid = {'C': [0.1,1, 10, 100], 'gamma': [1,0.1,0.01,0.001],'kernel': ["rbf"]}
+SVMcv = GridSearchCV(SVC(),param_grid,refit=True,verbose=2)
+SVMcv.fit(rescaledX_train, y_train)
+SVMcv_pred = SVMcv.predict(rescaledX_test)
+print(classification_report(y_test, SVMcv_pred ))
+print(confusion_matrix(y_test,SVMcv_pred))
+SVMcv_disp = plot_roc_curve(SVMcv, rescaledX_test, y_test)
+plt.plot([0, 1], [0, 1], 'k--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Tuned Linear SVC ROC Curve')
+plt.show()
+
+
+from sklearn.naive_bayes import GaussianNB
+clf = GaussianNB()
+clf.fit(rescaledX_train,y_train)
+GNB_pred = clf.predict(rescaledX_test)
+print(classification_report(y_test, GNB_pred ))
+print(confusion_matrix(y_test,GNB_pred))
+
+clf_disp = plot_roc_curve(clf, rescaledX_test, y_test)
+plt.plot([0, 1], [0, 1], 'k--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Gaussian Naive Bayes ROC Curve')
+plt.show()
+
+
+ber = BernoulliNB()
+ber.fit(rescaledX_train,y_train)
+BNB_pred = ber.predict(rescaledX_test)
+print(classification_report(y_test, BNB_pred ))
+print(confusion_matrix(y_test,BNB_pred))
+ber_disp = plot_roc_curve(ber, rescaledX_test, y_test)
+plt.plot([0, 1], [0, 1], 'k--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Bernoulli Naive Bayes ROC Curve')
+plt.show()
+
